@@ -3,96 +3,17 @@
 #include <string.h>
 #include <stdint.h>
 
-// Todo
+#include "vm.h"
+
+// TODO
 //  - Resumable Exceptions
 //  - efficiency -> pledge to release resource?
 
-// DEFINITIONS
-
-#define HEADER enum type type
 #define ERROR(x) {puts(x);exit(1);}
-
-enum type {
-    FUN = 1234,
-    CFUN,
-    CLOSURE,
-    CCLOSURE,
-    INT,
-    EVAL,
-};
-
-struct opcode {
-    enum {
-        PUSHFREE, PUSHBOUND, PUSHLOCAL, PUSHCONST,
-        POPLOCAL,
-        POP, CALL, RETURN, CLOSE, END,
-        MKINT,
-        PRINT
-    } opcode;
-    int arg;
-};
-
-// BOX DEFINITIONS
-
-struct box_any {
-    HEADER;
-};
-
-typedef struct box_any * (*call_type)(struct box_any **);
-
-struct box_fun {
-    HEADER;
-    struct box_any ** consts;
-    struct opcode * opcodes;
-    int stacksize;
-    int nlocals;
-    int nfree;
-    int nbound;
-};
-
-struct box_closure {
-    HEADER;
-    struct box_fun * fun;
-    struct box_any ** free; /* null for functions without free variables */
-    struct box_any ** bound;
-    int nbound;
-};
-
-struct box_cfun {
-    HEADER;
-    call_type call;
-    int narg;
-};
-
-struct box_cclosure {
-    HEADER;
-    struct box_cfun * cfun;
-    struct box_any ** bound;
-    int nbound;
-};
-
-struct box_int {
-    HEADER;
-    int val;
-};
-
-struct box_eval {
-    HEADER;
-    struct box_fun * code;
-    struct box_any ** locals;
-    struct box_any ** stack;
-    struct box_any ** bound;
-    struct box_any ** free;
-    struct box_eval * prev;
-    int ip;
-    int sp;
-};
 
 // ALLOC
 
-static
-size_t
-box_size(enum type type) {
+static size_t box_size(enum type type) {
     switch (type) {
         case FUN: return sizeof(struct box_fun);
         case CLOSURE: return sizeof(struct box_closure);
@@ -104,22 +25,19 @@ box_size(enum type type) {
     ERROR("box_size: unknown type");
 }
 
-void *
-box_alloc(enum type type) {
+void * box_alloc(enum type type) {
     struct box_any * box = malloc(box_size(type));
     box->type = type;
     return box;
 }
 
-struct box_any **
-box_list_alloc(int i) {
+struct box_any ** box_list_alloc(int i) {
     return calloc(i, sizeof(struct box_any*));
 }
 
 // MISC
 
-void
-print_box(struct box_any * f) {
+static void print_box(struct box_any * f) {
     if (!f) {
         printf("NULL POINTER!!\n");
         return;
@@ -346,55 +264,4 @@ eval_next(struct box_eval * es) {
 
     }
     return es;
-}
-
-struct box_any * add(struct box_any ** args) {
-    int i = (((struct box_int*)args[0])->val +
-             ((struct box_int*)args[1])->val);
-    return mkint(i);
-}
-
-int main() {
-    struct box_any * cadd = mkcfun(2, add);
-
-    // g = \x -> print(x + 1)
-    struct opcode gopcodes[] = {
-        { PUSHBOUND, 0},
-        { MKINT, 1 },
-        { PUSHCONST, 0},
-        { CALL, 0 },
-        { CALL, 0 },
-        { PRINT, 0 },
-        { END, 0 }
-    };
-    struct box_fun * g = box_alloc(FUN);
-    g->consts = box_list_alloc(1);
-    g->consts[0] = cadd;
-    g->opcodes = &gopcodes[0];
-    g->stacksize = 0;
-    g->nlocals = 0;
-    g->nfree = 0;
-    g->nbound = 1;
-
-    // f = g(20)
-    struct opcode fopcodes[] = {
-        { MKINT, 20 },
-        { PUSHCONST, 0 },
-        { CALL, 0 },
-        { END, 0 }
-    };
-    struct box_fun * f = box_alloc(FUN);
-    f->consts = box_list_alloc(1);
-    f->consts[0] = (struct box_any*)g;
-    f->opcodes = &fopcodes[0];
-    f->stacksize = 1000;
-    f->nlocals = 0;
-    f->nfree = 0;
-    f->nbound = 0;
-
-    struct box_eval * e = mkeval(0, f, 0, 0);
-
-    while ((e = eval_next(e))) {
-        //printf("<%p>\n", e);
-    };
 }

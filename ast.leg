@@ -1,0 +1,154 @@
+%{
+#include "ast.h"
+
+#define YYSTYPE struct ast_node *
+struct ast_node * last;
+
+struct ast_node * mkstmtvar(struct ast_node * name, struct ast_node * expr) {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = STMTASSIGN;
+    node->x.stmtassign.name = name->x.atomload.name;
+    node->x.stmtassign.expr = expr;
+    last = node;
+    free(name);
+    return node;
+}
+
+struct ast_node * mklam(struct ast_node * args, struct ast_node * expr) {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = LAM;
+    node->x.lam.name = "<anonymous>";
+    node->x.lam.args = args;
+    node->x.lam.expr = expr;
+    last = node;
+    return node;
+}
+
+struct ast_node * mkapp(struct ast_node * f, struct ast_node * x) {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = APP;
+    node->x.app.f = f;
+    node->x.app.x = x;
+    last = node;
+    return node;
+}
+
+struct ast_node * mkatomload(char * x) {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = ATOMLOAD;
+    node->x.atomload.name = strdup(x);
+    last = node;
+    return node;
+}
+
+struct ast_node * mkatomint(char * x) {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = ATOMINT;
+    node->x.atomint.value = strdup(x);
+    last = node;
+    return node;
+}
+
+struct ast_node * mkstmtfun(struct ast_node * name, struct ast_node * args, struct ast_node * expr) {
+    struct ast_node * f = mklam(args, expr);
+    f->x.lam.name = name->x.atomload.name;
+    return mkstmtvar(name, f);
+}
+
+struct ast_node * mkbinop(struct ast_node * op, struct ast_node * lhs, struct ast_node * rhs) {
+    struct ast_node * f = op;
+    struct ast_node * x = mkapp(f, lhs);
+    struct ast_node * y = mkapp(x, rhs);
+    return y;
+}
+
+struct ast_node * mknamelist() {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = NAMELIST;
+    node->x.namelist.nnames = 0;
+    node->x.namelist.names = 0;
+    last = node;
+    return node;
+}
+
+struct ast_node * addnamelist(struct ast_node * l, struct ast_node * x) {
+    l->x.namelist.nnames += 1;
+    l->x.namelist.names = realloc(l->x.namelist.names, l->x.namelist.nnames * sizeof(char *));
+    l->x.namelist.names[l->x.namelist.nnames-1] = x->x.atomload.name;
+    return l;
+}
+
+struct ast_node * mkstmtbinop(struct ast_node * op, struct ast_node * lhs, struct ast_node * rhs, struct ast_node * e) {
+    struct ast_node * args = addnamelist(addnamelist(mknamelist(), lhs), rhs);
+    return mkstmtfun(op, args, e);
+}
+
+void print_node(struct ast_node * node) {
+    switch (node->type) {
+        case STMTASSIGN:
+            printf("(assign %s ", node->x.stmtassign.name);
+            print_node(node->x.stmtassign.expr);
+            printf(")");
+            break;
+        case LAM:
+            printf("(lam %s ", node->x.lam.name);
+            struct ast_node * namelist = node->x.lam.args;
+            for (int i = 0; i < namelist->x.namelist.nnames; i++) {
+                printf("%s ", namelist->x.namelist.names[i]);
+            }
+            print_node(node->x.lam.expr);
+            printf(")");
+            break;
+        case APP:
+            printf("(app ");
+            print_node(node->x.app.f);
+            printf(" ");
+            print_node(node->x.app.x);
+            printf(")");
+            break;
+        case ATOMLOAD:
+            printf("(load %s)", node->x.atomload.name);
+            break;
+        case ATOMINT:
+            printf("(load %s)", node->x.atomint.value);
+            break;
+        case NAMELIST:
+            for (int i = 0; i < node->x.namelist.nnames; i++) {
+                printf("%s ", node->x.namelist.names[i]);
+            }
+            break;
+    }
+}
+%}
+
+# Program         = s:Stmt EOL                        { $$ = mkprogram(s); }
+Stmt            = (StmtBinOp | StmtVar | StmtFun) EOL
+StmtVar         = n:NAME ASSIGN e:Expr              { $$ = mkstmtvar(n, e); }
+StmtFun         = n:NAME a:Arg ASSIGN e:Expr        { $$ = mkstmtfun(n, a, e); }
+StmtBinOp       = lhs:NAME op:OP rhs:NAME
+                  ASSIGN e:Expr                     { $$ = mkstmtbinop(op, lhs, rhs, e); }
+Expr            = App
+                | Lam
+                | BinOp
+                | Term
+Lam             = a:Arg TO e:Expr                   { $$ = mklam(a, e); }
+Arg             = args:NAME                         { args = addnamelist(mknamelist(), args); }
+                  (next:NAME                        { $$ = addnamelist(args, next); }
+                  )*                                { $$ = args; }
+BinOp           = lhs:Term op:OP rhs:Expr           { $$ = mkbinop(op, lhs, rhs); }
+App             = f:Term x:Expr                     { $$ = mkapp(f, x); }
+Term            = AtomInt
+                | AtomLoad
+                | OPEN Expr CLOSE
+AtomLoad        = ! (Arg TO) n:NAME                 { $$ = n; }
+AtomInt         = n:NUMBER                          { $$ = n; }
+
+ASSIGN  = '='                               SPACE
+TO      = '->'                              SPACE
+NUMBER  = < [0-9]+ >                        SPACE   { $$ = mkatomint(yytext); }
+OP      = !TO < [+\-*/<>%^|&]+ >            SPACE   { $$ = mkatomload(yytext); }
+NAME    = < [a-zA-Z_][a-zA-Z_0-9/]*[']* >   SPACE   { $$ = mkatomload(yytext); }
+OPEN    = '('                               SPACE
+CLOSE   = ')'                               SPACE
+SPACE   = [ \t]*
+EOL     = '\n' | '\r\n' | '\r'

@@ -1,0 +1,6 @@
+loadint = 10
+app     = f x
+a + b   = 10
+c       = a + b
+a b c   = f x -> f f x
+f x     = (x -> y -> x) x x
