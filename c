@@ -20,3 +20,5 @@ runtest () {
 runtest ast_prog
 runtest vm_add
 runtest compile_id
+runtest compile_const
+runtest compile_const_free

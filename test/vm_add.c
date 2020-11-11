@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "../src/vm.h"
 
 struct box_any * add(struct box_any ** args) {
@@ -9,14 +10,16 @@ struct box_any * add(struct box_any ** args) {
 int main() {
     struct box_any * cadd = mkcfun(2, add);
 
-    // g = \x -> print(x + 1)
+    // g = \x -> print(x + 1) ; return x + 1
     struct opcode gopcodes[] = {
         { PUSHBOUND, 0},
         { MKINT, 1 },
         { PUSHCONST, 0},
         { CALL, 0 },
         { CALL, 0 },
+        { DUP, 0 },
         { PRINT, 0 },
+        { RETURN, 0 },
         { END, 0 }
     };
     struct box_fun * g = box_alloc(FUN);
@@ -28,7 +31,7 @@ int main() {
     g->nfree = 0;
     g->nbound = 1;
 
-    // f = g(20)
+    // f = g(g(20))
     struct opcode fopcodes[] = {
         { MKINT, 20 },
         { PUSHCONST, 0 },
@@ -44,9 +47,15 @@ int main() {
     f->nfree = 0;
     f->nbound = 0;
 
-    struct box_eval * e = mkeval(0, f, 0, 0);
+    struct box_eval * e0, * e = mkeval(0, f, 0, 0);
+    e0 = e;
 
     while ((e = eval_next(e))) {
-        //printf("<%p>\n", e);
     };
+
+    if (((struct box_int*)e0->stack[0])->val == 21) {
+        puts("OK");
+    } else {
+        puts("ERR");
+    }
 }

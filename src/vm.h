@@ -17,7 +17,8 @@ enum opcode_code {
     POP, CALL, RETURN, CLOSE, END,
     // for debugging:
     MKINT,
-    PRINT
+    PRINT,
+    DUP
 };
 
 struct opcode {
@@ -95,6 +96,5 @@ struct box_any * mkclosure(struct box_fun * f, struct box_any ** free);
 
 struct box_eval * mkeval(struct box_eval * prev, struct box_fun * code, struct box_any ** bound, struct box_any ** free);
 struct box_eval * eval_next(struct box_eval * es);
-
 
 void print_box(struct box_any * f);

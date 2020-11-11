@@ -1,13 +1,14 @@
 #include "../src/compile.h"
 
-struct ast_node * mkid(const char * bound) {
-    struct ast_node * args = addnamelist(mknamelist(), mkatomload(strdup(bound)));
-    struct ast_node * expr = mkatomload(strdup(bound));
+struct ast_node * mkconst() {
+    struct ast_node * args = addnamelist(addnamelist(mknamelist(),
+            mkatomload("x")), mkatomload("y"));
+    struct ast_node * expr = mkatomload(strdup("x"));
     return mklam(args, expr);
 }
 
 int main() {
-    struct ast_node * id = mkid("x");
+    struct ast_node * id = mkconst();
     print_node(id);
     puts("");
     struct box_fun * f = mkfun(id);
@@ -15,12 +16,10 @@ int main() {
 
     // main
     struct opcode fopcodes[] = {
-        { MKINT, 42 },
-        { PUSHCONST, 0 },
+        { MKINT, 2 },
+        { MKINT, 1 },
         { PUSHCONST, 0 },
         { CALL, 0 },
-        { CALL, 0 },
-        { PUSHCONST, 0 },
         { CALL, 0 },
         { PRINT, 0 },
         { END, 0 }
@@ -34,13 +33,13 @@ int main() {
     fmain->nfree = 0;
     fmain->nbound = 0;
 
-    struct box_eval * e0, * e = mkeval(0, fmain, 0, 0);
+    struct box_eval * e0,* e = mkeval(0, fmain, 0, 0);
     e0 = e;
 
     while ((e = eval_next(e))) {
     };
 
-    if (((struct box_int*)e0->stack[0])->val == 42) {
+    if (((struct box_int*)e0->stack[0])->val == 1) {
         puts("OK");
     } else {
         puts("ERR");

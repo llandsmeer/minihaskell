@@ -29,8 +29,35 @@ void addop(struct box_fun * f, enum opcode_code code, int arg) {
 }
 
 static
-void compile(struct box_fun * f, struct ast_node * n) {
+int lookup_name(char ** names, int n, const char * name) {
+    for (int i = 0; i < n; i++) {
+        if (strcmp(names[i], name) == 0) {
+            return i;
+            break;
+        }
+    }
+    return -1;
+}
+
+static
+void compile_load(struct box_fun * f, char * name) {
     int idx;
+    idx = lookup_name(f->bound_names, f->nbound, name);
+    if (idx >= 0) {
+        addop(f, PUSHBOUND, idx);
+    }
+    if (idx == -1) {
+        idx = lookup_name(f->free_names, f->nfree, name);
+        if (idx == -1) {
+            idx = f->nfree;
+            APPEND(f->free_names, f->nfree, name);
+        }
+        addop(f, PUSHFREE, idx);
+    }
+}
+
+static
+void compile(struct box_fun * f, struct ast_node * n) {
     struct box_fun * g;
     switch (n->type) {
         case STMTASSIGN:
@@ -39,7 +66,15 @@ void compile(struct box_fun * f, struct ast_node * n) {
         case LAM:
             g = mkfun(n);
             APPEND(f->consts, f->nconsts, g);
+            if (g->nfree > 0) {
+                for (int i = 0; i < g->nfree; i++) {
+                    compile_load(f, g->free_names[i]);
+                }
+            }
             addop(f, PUSHCONST, f->nconsts-1);
+            if (g->nfree > 0) {
+                addop(f, CLOSE, NOARG);
+            }
             break;
         case APP:
             compile(f, n->x.app.x);
@@ -47,17 +82,7 @@ void compile(struct box_fun * f, struct ast_node * n) {
             addop(f, CALL, NOARG);
             break;
         case ATOMLOAD:
-            idx = -1;
-            for (int i = 0; i < f->nbound; i++) {
-                if (strcmp(n->x.atomload.name, f->bound_names[i]) == 0) {
-                    idx = i;
-                    break;
-                }
-            }
-            if (idx == -1) {
-                ERROR("NON BOUND VARIABLES NOT SUPPORTED");
-            }
-            addop(f, PUSHBOUND, idx);
+            compile_load(f, n->x.atomload.name);
             break;
         case ATOMINT:
             APPEND(f->consts, f->nconsts, mkint(atoi(n->x.atomint.value)));

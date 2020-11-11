@@ -5,6 +5,12 @@
 
 #include "vm.h"
 
+const char * opcode_str[] ={   "PUSHFREE", "PUSHBOUND", "PUSHLOCAL", "PUSHCONST",
+    "POPLOCAL",
+    "POP", "CALL", "RETURN", "CLOSE", "END",
+    "MKINT",
+    "PRINT"};
+
 // TODO
 //  - Resumable Exceptions
 //  - efficiency -> pledge to release resource?
@@ -87,7 +93,7 @@ mkclosure(struct box_fun * f, struct box_any ** free) {
     if (f->nfree == 0) {
         ERROR("can not capture 0 free variables");
     }
-    struct box_closure * c = box_alloc(FUN);
+    struct box_closure * c = box_alloc(CLOSURE);
     c->free = box_list_alloc(f->nfree);
     memcpy(c->free, free, f->nfree * sizeof(struct box_any*));
     c->bound = 0;
@@ -150,6 +156,7 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
         if (c->fun->nfree > 0 && !c->free) {
             ERROR("Can not apply to closure with missing free capture");
         } else if (c->nbound + 1 == c->fun->nbound && c->nbound == 0) {
+            // for closures over free instead bound variables
             struct box_any ** args = box_list_alloc(1);
             args[0] = x;
             return mkeval(current, c->fun, args, c->free);
@@ -158,7 +165,6 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
             memcpy(args, c->bound, c->nbound*sizeof(struct box_any *));
             args[c->nbound] = x;
             struct box_eval * res = mkeval(current, c->fun, args, c->free);
-            free(args);
             return res;
         } else {
             struct box_closure * c = (struct box_closure*)f;
@@ -218,6 +224,7 @@ struct box_eval *
 eval_next(struct box_eval * es) {
     struct box_any * f, * x;
     int arg = es->code->opcodes[es->ip].arg;
+    // printf("%10s % 10d %p\n", opcode_str[es->code->opcodes[es->ip].opcode], arg, es);
     switch (es->code->opcodes[es->ip++].opcode) {
         case PUSHFREE:
             es->stack[es->sp++] = es->free[arg];
@@ -260,6 +267,10 @@ eval_next(struct box_eval * es) {
         case PRINT:
             x = es->stack[--es->sp];
             print_box(x);
+            break;
+        case DUP:
+            x = es->stack[es->sp-1];
+            es->stack[es->sp++] = x;
             break;
 
     }
