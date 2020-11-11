@@ -11,14 +11,17 @@ enum type {
     EVAL,
 };
 
+enum opcode_code {
+    PUSHFREE, PUSHBOUND, PUSHLOCAL, PUSHCONST,
+    POPLOCAL,
+    POP, CALL, RETURN, CLOSE, END,
+    // for debugging:
+    MKINT,
+    PRINT
+};
+
 struct opcode {
-    enum {
-        PUSHFREE, PUSHBOUND, PUSHLOCAL, PUSHCONST,
-        POPLOCAL,
-        POP, CALL, RETURN, CLOSE, END,
-        MKINT,
-        PRINT
-    } opcode;
+    enum opcode_code opcode;
     int arg;
 };
 
@@ -36,6 +39,12 @@ struct box_fun {
     int nlocals;
     int nfree;
     int nbound;
+    // needed during compilation:
+    int nconsts;
+    int nopcodes;
+    char ** local_names;
+    char ** bound_names;
+    char ** free_names;
 };
 
 struct box_closure {
@@ -86,3 +95,6 @@ struct box_any * mkclosure(struct box_fun * f, struct box_any ** free);
 
 struct box_eval * mkeval(struct box_eval * prev, struct box_fun * code, struct box_any ** bound, struct box_any ** free);
 struct box_eval * eval_next(struct box_eval * es);
+
+
+void print_box(struct box_any * f);

@@ -37,7 +37,7 @@ struct box_any ** box_list_alloc(int i) {
 
 // MISC
 
-static void print_box(struct box_any * f) {
+void print_box(struct box_any * f) {
     if (!f) {
         printf("NULL POINTER!!\n");
         return;
