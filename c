@@ -3,21 +3,33 @@ set -e
 args="$@"
 
 leg ast.leg > src/ast.c
+echo "LEG ast.leg"
 
-runtest () {
-    echo "# $1"
+cc () {
     gcc -Wall -Wextra -Werror \
-        src/ast.c \
-        src/vm.c \
-        src/compile.c \
-        test/$1.c \
+        "$@" \
         -fsanitize=address \
         -fno-omit-frame-pointer \
         -Wno-unused-parameter \
         -Wno-unused-function \
         -Wno-missing-field-initializers \
-        -g -o test/$1.x \
+        -g \
         $args
+}
+
+mkdir -p build
+rm -f build/*.o
+for file in $(cd src; echo *.c)
+do
+    echo "CC  $file"
+    cc -c "src/${file}" -o "build/${file}.o"
+done
+
+ar rcs build/lib.a build/*.o
+
+runtest () {
+    echo "# $1"
+    cc test/$1.c -o test/$1.x build/lib.a
     ASAN_OPTIONS=detect_leaks=false test/$1.x
     echo
 }
