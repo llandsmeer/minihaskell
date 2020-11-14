@@ -2,14 +2,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <assert.h>
 
 #include "vm.h"
 
-const char * opcode_str[] ={   "PUSHFREE", "PUSHBOUND", "PUSHLOCAL", "PUSHCONST",
+const char * opcode_str[] ={
+    "PUSHFREE", "PUSHBOUND", "PUSHLOCAL", "PUSHCONST",
     "POPLOCAL",
     "POP", "CALL", "RETURN", "CLOSE", "END",
+    // for debugging:
     "MKINT",
-    "PRINT"};
+    "PRINT",
+    "DUP",
+    "CALL0"
+};
 
 // TODO
 //  - Resumable Exceptions
@@ -44,7 +50,7 @@ struct box_any ** box_list_alloc(int i) {
 // MISC
 
 void print_box(struct box_any * f) {
-    if (!f) {
+    if (f==0) {
         printf("NULL POINTER!!\n");
         return;
     }
@@ -94,15 +100,11 @@ mkclosure(struct box_fun * f, struct box_any ** free) {
         ERROR("can not capture 0 free variables");
     }
     struct box_closure * c = box_alloc(CLOSURE);
-    c->free = box_list_alloc(f->nfree);
+    c->free = f->nfree ? box_list_alloc(f->nfree) : 0;
     memcpy(c->free, free, f->nfree * sizeof(struct box_any*));
+    c->nbound = 0;
     c->bound = 0;
     c->fun = f;
-    if (f->nbound > 1) {
-        c->bound = box_list_alloc(f->nbound-1);
-    } else {
-        c->bound = 0;
-    }
     return (struct box_any*)c;
 }
 
@@ -119,7 +121,7 @@ mkeval(
     es->sp = 0;
     es->bound = bound;
     es->free = free;
-    es->locals = box_list_alloc(code->nlocals);
+    es->locals = code->nlocals ? box_list_alloc(code->nlocals) : 0;
     es->stack = box_list_alloc(code->stacksize);
     return es;
 };
@@ -172,7 +174,7 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
             k->fun = c->fun;
             k->nbound = c->nbound + 1;
             k->free = c->free;
-            k->bound = box_list_alloc(c->fun->nbound-1);
+            k->bound = box_list_alloc(c->nbound +1);
             memcpy(k->bound, c->bound, c->nbound*sizeof(struct box_any *));
             k->bound[c->nbound] = x;
             current->stack[current->sp++] = (struct box_any*)k;
@@ -223,16 +225,36 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
 struct box_eval *
 eval_next(struct box_eval * es) {
     struct box_any * f, * x;
+    struct box_fun * g;
     int arg = es->code->opcodes[es->ip].arg;
-    // printf("%10s % 10d %p\n", opcode_str[es->code->opcodes[es->ip].opcode], arg, es);
-    switch (es->code->opcodes[es->ip++].opcode) {
+    enum opcode_code code = es->code->opcodes[es->ip].opcode;
+#ifdef DEBUG
+    printf("[%02x/%02d] %10s % 10d %p [%d] <- ",
+            (int)(((unsigned long)es >> 8) & 0xff),
+            es->ip,
+            (code > 0 && code < 20) ? opcode_str[code] : "<ERROR>",
+            arg, es, es->sp);
+    if (es->sp > 0) {
+        print_box(es->stack[es->sp-1]);
+    } else {
+        puts("");
+    }
+#endif
+    es->ip++;
+    switch (code) {
         case PUSHFREE:
+            if (!es->free) { ERROR("free = NULL"); }
             es->stack[es->sp++] = es->free[arg];
             break;
         case PUSHBOUND:
+            if (!es->bound) { ERROR("bound = NULL"); }
+            assert(arg >= 0 && arg < es->code->nbound);
             es->stack[es->sp++] = es->bound[arg];
             break;
         case PUSHCONST:
+            if (arg >= es->code->nconsts) {
+                ERROR("Invalid const");
+            }
             es->stack[es->sp++] = es->code->consts[arg];
             break;
         case PUSHLOCAL:
@@ -249,7 +271,6 @@ eval_next(struct box_eval * es) {
             x = es->stack[--es->sp];
             return eval_app(es, f, x);
         case CLOSE:
-            // So - how do we handle exceptions here? Resumable Exceptions?
             f = es->stack[--es->sp];
             es->sp -= ((struct box_fun*)f)->nfree;
             x = mkclosure((struct box_fun*)f, &es->stack[es->sp]);
@@ -272,7 +293,13 @@ eval_next(struct box_eval * es) {
             x = es->stack[es->sp-1];
             es->stack[es->sp++] = x;
             break;
-
+        case CALL0:
+            assert(es->sp > 0);
+            g = (struct box_fun*)es->stack[--es->sp];
+            assert(g->type == FUN);
+            assert(g->nfree == 0);
+            assert(g->nbound == 0);
+            return mkeval(es, g, 0, 0);
     }
     return es;
 }

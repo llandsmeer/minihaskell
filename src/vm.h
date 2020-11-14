@@ -18,7 +18,8 @@ enum opcode_code {
     // for debugging:
     MKINT,
     PRINT,
-    DUP
+    DUP,
+    CALL0
 };
 
 struct opcode {
@@ -35,7 +36,6 @@ typedef struct box_any * (*call_type)(struct box_any **);
 struct box_fun {
     HEADER;
     struct box_any ** consts;
-    struct opcode * opcodes;
     int stacksize;
     int nlocals;
     int nfree;
@@ -46,6 +46,7 @@ struct box_fun {
     char ** local_names;
     char ** bound_names;
     char ** free_names;
+    struct opcode * opcodes;
 };
 
 struct box_closure {

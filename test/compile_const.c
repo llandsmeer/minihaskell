@@ -32,6 +32,8 @@ int main() {
     fmain->nlocals = 0;
     fmain->nfree = 0;
     fmain->nbound = 0;
+    fmain->nconsts = 1;
+    fmain->nopcodes = sizeof(fopcodes) / sizeof(fopcodes[0]);
 
     struct box_eval * e0,* e = mkeval(0, fmain, 0, 0);
     e0 = e;

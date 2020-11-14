@@ -26,10 +26,12 @@ int main() {
     g->consts = box_list_alloc(1);
     g->consts[0] = cadd;
     g->opcodes = &gopcodes[0];
-    g->stacksize = 0;
+    g->stacksize = 1000;
     g->nlocals = 0;
     g->nfree = 0;
     g->nbound = 1;
+    g->nconsts = 1;
+    g->nopcodes = sizeof(gopcodes) / sizeof(gopcodes[0]);
 
     // f = g(g(20))
     struct opcode fopcodes[] = {
@@ -46,6 +48,8 @@ int main() {
     f->nlocals = 0;
     f->nfree = 0;
     f->nbound = 0;
+    f->nconsts = 1;
+    f->nopcodes = sizeof(fopcodes) / sizeof(fopcodes[0]);
 
     struct box_eval * e0, * e = mkeval(0, f, 0, 0);
     e0 = e;
