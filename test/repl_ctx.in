@@ -1,0 +1,4 @@
+id x = x
+const x y = x
+a = id 10
+(const (id a)) 11

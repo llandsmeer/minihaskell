@@ -6,13 +6,6 @@
 #include "../src/ast.h"
 #include "../src/compile.h"
 
-struct ctx {
-    struct ctx * next;
-    char * name;
-    struct box_fun * expr;
-};
-
-
 int main() {
     struct opcode fopcodes[] = {
         { PUSHCONST, 0 },
@@ -35,20 +28,21 @@ int main() {
     close(0);
     dup(fd);
     while (yyparse()) {
-        puts("=====================================");
+        printf(">>> ");
         print_node(last);
         puts("");
         if (last->type != STMTASSIGN) {
-            printf("Not an assigment:");
-            print_node(last);
-            printf("\n");
-            continue;
+            struct box_fun * g = mkfun(mklam(mknamelist(), last));
+            fmain->consts[0] = (struct box_any*)g;
+            struct box_eval * e = mkeval(0, fmain, 0, 0);
+            while ((e = eval_next(e))) {};
         } else {
             struct box_fun * g = mkfun(mklam(mknamelist(), last->x.stmtassign.expr));
             fmain->consts[0] = (struct box_any*)g;
             struct box_eval * e = mkeval(0, fmain, 0, 0);
             while ((e = eval_next(e))) {};
         }
+        puts("");
     }
     return 0;
 }

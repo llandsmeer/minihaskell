@@ -34,9 +34,11 @@ runtest () {
     echo
 }
 
-runtest ast_prog
-runtest vm_add
-runtest compile_id
-runtest compile_const
-runtest compile_const_free
-runtest repl
+# runtest ast_prog
+# runtest vm_add
+# runtest compile_id
+# runtest compile_const
+# runtest compile_const_free
+# runtest repl
+runtest repl_ctx
+#runtest repl_rewrite

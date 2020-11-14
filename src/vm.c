@@ -8,7 +8,7 @@
 
 const char * opcode_str[] ={
     "PUSHFREE", "PUSHBOUND", "PUSHLOCAL", "PUSHCONST",
-    "POPLOCAL",
+    "POPFREE", "POPBOUND", "POPLOCAL",
     "POP", "CALL", "RETURN", "CLOSE", "END",
     // for debugging:
     "MKINT",
@@ -122,6 +122,7 @@ mkeval(
     es->bound = bound;
     es->free = free;
     es->locals = code->nlocals ? box_list_alloc(code->nlocals) : 0;
+    es->nlocals = code->nlocals; // because code->nlocals can change later
     es->stack = box_list_alloc(code->stacksize);
     return es;
 };
@@ -224,6 +225,7 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
 
 struct box_eval *
 eval_next(struct box_eval * es) {
+    assert(es->sp >= 0);
     struct box_any * f, * x;
     struct box_fun * g;
     int arg = es->code->opcodes[es->ip].arg;
@@ -258,12 +260,25 @@ eval_next(struct box_eval * es) {
             es->stack[es->sp++] = es->code->consts[arg];
             break;
         case PUSHLOCAL:
+            assert(arg < es->nlocals);
             es->stack[es->sp++] = es->locals[arg];
             break;
+        case POPFREE:
+             es->free[arg] = es->stack[--es->sp];
+            break;
+        case POPBOUND:
+             es->bound[arg] = es->stack[--es->sp];
+            break;
         case POPLOCAL:
+             if (arg >= es->nlocals && arg < es->code->nlocals) {
+                 es->locals = realloc(es->locals, es->code->nlocals*sizeof(struct box_any *));
+                 assert(es->locals);
+                 es->nlocals = es->code->nlocals;
+             }
              es->locals[arg] = es->stack[--es->sp];
             break;
         case POP:
+            assert(es->sp > 0);
             es->sp--;
             break;
         case CALL:
@@ -290,6 +305,7 @@ eval_next(struct box_eval * es) {
             print_box(x);
             break;
         case DUP:
+            assert(es->sp > 0);
             x = es->stack[es->sp-1];
             es->stack[es->sp++] = x;
             break;

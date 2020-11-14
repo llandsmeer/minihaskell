@@ -13,7 +13,7 @@ enum type {
 
 enum opcode_code {
     PUSHFREE, PUSHBOUND, PUSHLOCAL, PUSHCONST,
-    POPLOCAL,
+    POPFREE, POPBOUND, POPLOCAL,
     POP, CALL, RETURN, CLOSE, END,
     // for debugging:
     MKINT,
@@ -70,6 +70,12 @@ struct box_cclosure {
     int nbound;
 };
 
+struct box_array {
+    HEADER;
+    int len;
+    struct box_any ** length;
+};
+
 struct box_int {
     HEADER;
     int val;
@@ -85,8 +91,8 @@ struct box_eval {
     struct box_eval * prev;
     int ip;
     int sp;
+    int nlocals;
 };
-
 
 struct box_any ** box_list_alloc(int i);
 void * box_alloc(enum type type);
