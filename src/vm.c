@@ -59,7 +59,10 @@ void print_box(struct box_any * f) {
             printf("<Function %p>", f);
             break;
         case CLOSURE:
-            printf("<Closure %p>", f);
+            printf("<Closure %p %d+%d>",
+                    f,
+                    ((struct box_closure*)f)->fun->nfree,
+                    ((struct box_closure*)f)->nbound);
             break;
         case CFUN:
             printf("<CFunction %p>", f);
@@ -264,10 +267,12 @@ eval_next(struct box_eval * es) {
             es->stack[es->sp++] = es->locals[arg];
             break;
         case POPFREE:
-             es->free[arg] = es->stack[--es->sp];
+            assert(es->sp >= 1);
+            es->free[arg] = es->stack[--es->sp];
             break;
         case POPBOUND:
-             es->bound[arg] = es->stack[--es->sp];
+            assert(es->sp >= 1);
+            es->bound[arg] = es->stack[--es->sp];
             break;
         case POPLOCAL:
              if (arg >= es->nlocals && arg < es->code->nlocals) {

@@ -122,7 +122,7 @@ void print_node(struct ast_node * node) {
 %}
 
 # Program         = s:Stmt EOL                        { $$ = mkprogram(s); }
-Body            = Stmt | Expr
+Body            = Stmt | (Expr EOL)
 Stmt            = (StmtBinOp | StmtVar | StmtFun) EOL
 StmtVar         = n:NAME ASSIGN e:Expr              { $$ = mkstmtvar(n, e); }
 StmtFun         = n:NAME a:Arg ASSIGN e:Expr        { $$ = mkstmtfun(n, a, e); }
