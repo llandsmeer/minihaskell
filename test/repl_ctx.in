@@ -1,7 +1,25 @@
+{
+ a = 10 ;
+ a
+ }
+
+g f x = {
+    y = f x ;
+    y
+    }
+
 id x = x
+
+(g id) 10
+
 const x y = x
+
 a = id 10
+
 (const (id a)) 11
+
 a / b = (const a) b
+
 a + b = b / a
+
 a + a

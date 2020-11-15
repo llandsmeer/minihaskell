@@ -7,6 +7,7 @@
 struct ast_node {
     enum {
         STMTASSIGN,
+        STMTANDTHEN,
         LAM,
         APP,
         ATOMLOAD,
@@ -18,6 +19,10 @@ struct ast_node {
             char * name;
             struct ast_node * expr;
         } stmtassign;
+        struct {
+            struct ast_node * first;
+            struct ast_node * second;
+        } stmtandthen;
         struct {
             char * name;
             struct ast_node * args;
@@ -41,6 +46,7 @@ struct ast_node {
 };
 
 struct ast_node * mkstmtvar(struct ast_node * name, struct ast_node * expr);
+struct ast_node * mkstmtandthen(struct ast_node *, struct ast_node *);
 struct ast_node * mklam(struct ast_node * args, struct ast_node * expr);
 struct ast_node * mkapp(struct ast_node * f, struct ast_node * x);
 struct ast_node * mkatomload(char * x);

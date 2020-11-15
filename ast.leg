@@ -14,6 +14,15 @@ struct ast_node * mkstmtvar(struct ast_node * name, struct ast_node * expr) {
     return node;
 }
 
+struct ast_node * mkstmtandthen(struct ast_node * first, struct ast_node * second) {
+    struct ast_node * node = malloc(sizeof(struct ast_node));
+    node->type = STMTANDTHEN;
+    node->x.stmtandthen.first = first;
+    node->x.stmtandthen.second = second;
+    last = node;
+    return node;
+}
+
 struct ast_node * mklam(struct ast_node * args, struct ast_node * expr) {
     struct ast_node * node = malloc(sizeof(struct ast_node));
     node->type = LAM;
@@ -90,6 +99,13 @@ void print_node(struct ast_node * node) {
             print_node(node->x.stmtassign.expr);
             printf(")");
             break;
+        case STMTANDTHEN:
+            printf("(andthen ");
+            print_node(node->x.stmtandthen.first);
+            printf(" ");
+            print_node(node->x.stmtandthen.second);
+            printf(")");
+            break;
         case LAM:
             printf("(lam %s ", node->x.lam.name);
             struct ast_node * namelist = node->x.lam.args;
@@ -122,13 +138,17 @@ void print_node(struct ast_node * node) {
 %}
 
 # Program         = s:Stmt EOL                        { $$ = mkprogram(s); }
-Body            = Stmt | (Expr EOL)
-Stmt            = (StmtBinOp | StmtVar | StmtFun) EOL
+Body            = ![ \t]+ Stmt EOL +
+Stmt            = (StmtBinOp | StmtVar | StmtFun | Expr)
+StmtMulti       = '{' S Multiline '}' S
+Multiline       = a:Stmt ';' S b:Multiline          { $$ = mkstmtandthen(a, b); }
+                | Stmt
 StmtVar         = n:NAME ASSIGN e:Expr              { $$ = mkstmtvar(n, e); }
 StmtFun         = n:NAME a:Arg ASSIGN e:Expr        { $$ = mkstmtfun(n, a, e); }
 StmtBinOp       = lhs:NAME op:OP rhs:NAME
                   ASSIGN e:Expr                     { $$ = mkstmtbinop(op, lhs, rhs, e); }
-Expr            = App
+Expr            = StmtMulti
+                | App
                 | Lam
                 | BinOp
                 | Term
@@ -144,12 +164,14 @@ Term            = AtomInt
 AtomLoad        = ! (Arg TO) n:NAME                 { $$ = n; }
 AtomInt         = n:NUMBER                          { $$ = n; }
 
-ASSIGN  = '='                               SPACE
-TO      = '->'                              SPACE
-NUMBER  = < [0-9]+ >                        SPACE   { $$ = mkatomint(yytext); }
-OP      = !TO < [+\-*/<>%^|&]+ >            SPACE   { $$ = mkatomload(yytext); }
-NAME    = < [a-zA-Z_][a-zA-Z_0-9/]*[']* >   SPACE   { $$ = mkatomload(yytext); }
-OPEN    = '('                               SPACE
-CLOSE   = ')'                               SPACE
+ASSIGN  = '='                               S
+TO      = '->'                              S
+NUMBER  = < [0-9]+ >                        S       { $$ = mkatomint(yytext); }
+OP      = !TO < [+\-*/<>%^|&]+ >            S       { $$ = mkatomload(yytext); }
+NAME    = < [a-zA-Z_][a-zA-Z_0-9/]*[']* >   S       { $$ = mkatomload(yytext); }
+OPEN    = '('                               S
+CLOSE   = ')'                               S
 SPACE   = [ \t]*
+CSPACE  = '\n' + [ \t]+
+S = SPACE CSPACE | SPACE
 EOL     = '\n' | '\r\n' | '\r'

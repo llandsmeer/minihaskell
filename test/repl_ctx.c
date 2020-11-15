@@ -7,6 +7,21 @@
 #include "../src/ast.h"
 #include "../src/compile.h"
 
+struct box_any * eval(struct box_eval * ctx, struct ast_node * n) {
+    box_append_code(ctx->code, last);
+    if (ctx->ip > 0) {
+        ctx->ip -= 1;
+    }
+    struct box_eval * e = ctx;
+    while ((e = eval_next(e)));
+    assert(ctx->sp <= 1);
+    if (ctx->sp == 1) {
+        struct box_any * result = ctx->stack[--ctx->sp];
+        return result;
+    }
+    return 0;
+}
+
 int main() {
     int fd = open("test/repl_ctx.in", O_RDONLY);
     close(0);
@@ -19,19 +34,8 @@ int main() {
         printf(">>> ");
         print_node(last);
         puts("");
-        box_append_code(module, last);
-        if (ctx->ip > 0) {
-            ctx->ip -= 1;
-        }
-        struct box_eval * e = ctx;
-        while ((e = eval_next(e)));
-        assert(ctx->sp <= 1);
-        if (ctx->sp == 1) {
-            struct box_any * result = ctx->stack[--ctx->sp];
-            print_box(result);
-        } else {
-            puts("nothing on the stack");
-        }
+        struct box_any * res = eval(ctx, last);
+        print_box(res);
         puts("");
     }
 }

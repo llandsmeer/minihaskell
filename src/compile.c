@@ -91,6 +91,11 @@ void compile(struct box_fun * f, struct ast_node * n) {
             compile(f, n->x.stmtassign.expr);
             compile_store(f, n->x.stmtassign.name);
             break;
+        case STMTANDTHEN:
+            compile(f, n->x.stmtandthen.first);
+            addop(f, POP, 0);
+            compile(f, n->x.stmtandthen.second);
+            break;
         case LAM:
             g = mkfun(n);
             APPEND(f->consts, f->nconsts, g);
