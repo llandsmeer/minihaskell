@@ -1,8 +1,23 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
+
+#if DEBUG
+#include <execinfo.h>
+void assert_(int ok, char * x) {
+    if (ok) return;
+    printf("\n=== assert(%s) failed ===\n", x);
+    void *array[10];
+    size_t size;
+    size = backtrace(array, 10);
+    backtrace_symbols_fd(array, size, 2);
+    exit(1);
+}
+#define str_(x) #x
+#define assert(x) assert_(!!(x), str_(x))
+#else
 #include <assert.h>
+#endif
 
 #include "vm.h"
 
@@ -18,36 +33,11 @@ const char * opcode_str[] ={
 };
 
 // TODO
-//  - Resumable Exceptions
+//  - Resumable Exceptions - add past end code?
+//  - -> resumption points / don't actually pop/push until everything's fine??
 //  - efficiency -> pledge to release resource?
 
 #define ERROR(x) {puts(x);exit(1);}
-
-// ALLOC
-
-static size_t box_size(enum type type) {
-    switch (type) {
-        case FUN: return sizeof(struct box_fun);
-        case CLOSURE: return sizeof(struct box_closure);
-        case CFUN: return sizeof(struct box_cfun);
-        case CCLOSURE: return sizeof(struct box_cclosure);
-        case INT: return sizeof(struct box_int);
-        case EVAL: return sizeof(struct box_eval);
-    }
-    ERROR("box_size: unknown type");
-}
-
-void * box_alloc(enum type type) {
-    struct box_any * box = malloc(box_size(type));
-    box->type = type;
-    return box;
-}
-
-struct box_any ** box_list_alloc(int i) {
-    return calloc(i, sizeof(struct box_any*));
-}
-
-// MISC
 
 void print_box(struct box_any * f) {
     if (f==0) {
@@ -59,10 +49,13 @@ void print_box(struct box_any * f) {
             printf("<Function %p>", f);
             break;
         case CLOSURE:
-            printf("<Closure %p %d+%d>",
+            printf("<Closure %p %d+%d/%d+%d>",
                     f,
+                    box_list_len(((struct box_closure*)f)->free),
+                    box_list_len(((struct box_closure*)f)->bound),
                     ((struct box_closure*)f)->fun->nfree,
-                    ((struct box_closure*)f)->nbound);
+                    ((struct box_closure*)f)->fun->nbound
+                    );
             break;
         case CFUN:
             printf("<CFunction %p>", f);
@@ -75,6 +68,9 @@ void print_box(struct box_any * f) {
             break;
         case INT:
             printf("<Int %d>", ((struct box_int*)f)->val);
+            break;
+        case LIST:
+            printf("<LIST>");
             break;
     }
     printf("\n");
@@ -98,15 +94,13 @@ mkint(int i) {
 }
 
 struct box_any *
-mkclosure(struct box_fun * f, struct box_any ** free) {
+mkclosure(struct box_fun * f, struct box_list * free) {
     if (f->nfree == 0) {
         ERROR("can not capture 0 free variables");
     }
     struct box_closure * c = box_alloc(CLOSURE);
-    c->free = f->nfree ? box_list_alloc(f->nfree) : 0;
-    memcpy(c->free, free, f->nfree * sizeof(struct box_any*));
-    c->nbound = 0;
-    c->bound = 0;
+    c->free = f->nfree ? box_list_copy(free) : 0;
+    c->bound = mklist(0);
     c->fun = f;
     return (struct box_any*)c;
 }
@@ -115,20 +109,84 @@ struct box_eval *
 mkeval(
         struct box_eval * prev,
         struct box_fun * code,
-        struct box_any ** bound,
-        struct box_any ** free) {
+        struct box_list * bound,
+        struct box_list * free) {
     struct box_eval * es = box_alloc(EVAL);
     es->prev = prev;
     es->code = code;
     es->ip = 0;
-    es->sp = 0;
     es->bound = bound;
     es->free = free;
-    es->locals = code->nlocals ? box_list_alloc(code->nlocals) : 0;
-    es->nlocals = code->nlocals; // because code->nlocals can change later
-    es->stack = box_list_alloc(code->stacksize);
+    es->locals = mklist(code->nlocals);
+    es->stack = mklist(0);
     return es;
 };
+
+// LIST
+
+struct box_list * mklist(int len) {
+    struct box_list * l = box_alloc(LIST);
+    l->len = len;
+    l->cap = len;
+    l->items = calloc(len, sizeof(struct box_any *));
+    return l;
+}
+
+void box_list_push(struct box_list * l, struct box_any * x) {
+    assert(l);
+    l->len += 1;
+    if (l->len > l->cap) {
+        l->cap += 8;
+        l->items = realloc(l->items, l->cap*sizeof(struct box_any *));
+        for (int i = l->len; i < l->cap; i++) {
+            l->items[i] = 0;
+        }
+        assert(l->items);
+    }
+    l->items[l->len-1] = x;
+}
+
+struct box_any * box_list_pop(struct box_list * l) {
+    assert(l);
+    assert(l->len > 0);
+    l->len -= 1;
+    assert(l->items[l->len]);
+    return l->items[l->len];
+}
+
+void box_list_set(struct box_list * l, int idx, struct box_any * x) {
+    assert(l);
+    if (idx < 0) idx += l->len;
+    if (!(idx >= 0 && idx < l->len)) {
+        l = 0;
+        print_box((struct box_any*)&l[0]);
+    }
+    assert(idx >= 0 && idx < l->len);
+    assert(x);
+    l->items[idx] = x;
+}
+
+struct box_any * box_list_get(struct box_list * l, int idx) {
+    assert(l);
+    if (idx < 0) idx += l->len;
+    assert(idx >= 0 && idx < l->len);
+    assert(l->items[idx]);
+    return l->items[idx];
+}
+
+struct box_list * box_list_copy(struct box_list * orig) {
+    struct box_list * l = mklist(orig->len + 1);
+    for (int i = 0; i < orig->len; i++) {
+        box_list_set(l, i, box_list_get(orig, i));
+    }
+    return orig;
+}
+
+int box_list_len(struct box_list * l) {
+    if (!l) return 0;
+    return l->len;
+}
+
 
 // EVAL
 
@@ -144,80 +202,74 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
         if (g->nbound < 1) {
             ERROR("fun nbound < 1???\n");
         } else if (g->nbound == 1) {
-            struct box_any ** args = box_list_alloc(1);
-            args[0] = x;
+            struct box_list * args = mklist(1);
+            box_list_set(args, 0, x);
             return mkeval(current, g, args, 0);
         } else {
             struct box_closure * c = box_alloc(CLOSURE);
             c->fun = g;
             c->free = 0;
-            c->nbound = 1;
-            c->bound = box_list_alloc(g->nbound-1);
-            c->bound[0] = x;
-            current->stack[current->sp++] = (struct box_any*)c;
+            c->bound = mklist(1);
+            box_list_set(c->bound, 0, x);
+            box_list_push(current->stack, (struct box_any*)c);
             return current;
         }
     } else if (f->type == CLOSURE) {
         struct box_closure * c = (struct box_closure*)f;
-        if (c->fun->nfree > 0 && !c->free) {
+        if (c->fun->nfree > 0 && box_list_len(c->free) == 0) {
             ERROR("Can not apply to closure with missing free capture");
-        } else if (c->nbound + 1 == c->fun->nbound && c->nbound == 0) {
+        } else if (box_list_len(c->bound) + 1 == c->fun->nbound
+                && box_list_len(c->bound) == 0) {
             // for closures over free instead bound variables
-            struct box_any ** args = box_list_alloc(1);
-            args[0] = x;
+            struct box_list * args = mklist(1);
+            box_list_set(args, 0, x);
             return mkeval(current, c->fun, args, c->free);
-        } else if (c->nbound + 1 == c->fun->nbound) {
-            struct box_any ** args = box_list_alloc(c->fun->nbound);
-            memcpy(args, c->bound, c->nbound*sizeof(struct box_any *));
-            args[c->nbound] = x;
+        } else if (box_list_len(c->bound) + 1 == c->fun->nbound) {
+            struct box_list * args = box_list_copy(c->bound);
+            box_list_push(args, x);
             struct box_eval * res = mkeval(current, c->fun, args, c->free);
             return res;
         } else {
             struct box_closure * c = (struct box_closure*)f;
             struct box_closure * k = box_alloc(CLOSURE);
             k->fun = c->fun;
-            k->nbound = c->nbound + 1;
             k->free = c->free;
-            k->bound = box_list_alloc(c->nbound +1);
-            memcpy(k->bound, c->bound, c->nbound*sizeof(struct box_any *));
-            k->bound[c->nbound] = x;
-            current->stack[current->sp++] = (struct box_any*)k;
+            k->bound = box_list_copy(c->bound);
+            box_list_push(k->bound, x);
+            box_list_push(current->stack, (struct box_any*)k);
             return current;
         }
     } else if (f->type == CFUN) {
         struct box_cfun * g = (struct box_cfun *)f;
         if (g->narg == 1) {
-            struct box_any * res = g->call(&x);
-            current->stack[current->sp++] = (struct box_any*)res;
+            struct box_list * args = mklist(1);
+            box_list_set(args, 0, x);
+            struct box_any * res = g->call(args);
+            box_list_push(current->stack, (struct box_any*)res);
             return current;
         } else {
             struct box_cclosure * c = box_alloc(CCLOSURE);
             c->cfun = g;
-            c->nbound = 1;
-            c->bound = box_list_alloc(g->narg-1);
-            c->bound[0] = x;
-            current->stack[current->sp++] = (struct box_any*)c;
+            c->bound = mklist(1);
+            box_list_set(c->bound, 0, x);
+            box_list_push(current->stack, (struct box_any*)c);
             return current;
         }
     } else if (f->type == CCLOSURE) {
         struct box_cclosure * c = (struct box_cclosure*)f;
-        if (c->nbound + 1 == c->cfun->narg) {
-            struct box_any ** args = box_list_alloc(c->cfun->narg);
-            memcpy(args, c->bound, c->nbound*sizeof(struct box_any *));
-            args[c->nbound] = x;
+        if (box_list_len(c->bound) + 1 == c->cfun->narg) {
+            struct box_list * args = box_list_copy(c->bound);
+            box_list_push(args, x);
             struct box_any * res = c->cfun->call(args);
-            free(args);
-            current->stack[current->sp++] = (struct box_any*)res;
+            box_list_push(current->stack, (struct box_any*)res);
             return current;
         } else {
             struct box_cclosure * c = (struct box_cclosure*)f;
             struct box_cclosure * k = box_alloc(CCLOSURE);
             k->cfun = c->cfun;
-            k->nbound = c->nbound + 1;
-            k->bound = box_list_alloc(c->cfun->narg-1);
-            memcpy(k->bound, c->bound, c->nbound*sizeof(struct box_any *));
-            k->bound[c->nbound] = x;
-            current->stack[current->sp++] = (struct box_any*)k;
+            k->bound = box_list_copy(c->bound);
+            box_list_push(k->bound, x);
+            box_list_push(current->stack, (struct box_any*)k);
             return current;
         }
     } else {
@@ -228,19 +280,22 @@ eval_app(struct box_eval * current, struct box_any * f, struct box_any * x) {
 
 struct box_eval *
 eval_next(struct box_eval * es) {
-    assert(es->sp >= 0);
     struct box_any * f, * x;
     struct box_fun * g;
+    struct box_list * l;
+    int n;
     int arg = es->code->opcodes[es->ip].arg;
     enum opcode_code code = es->code->opcodes[es->ip].opcode;
+    assert(es->ip < es->code->nopcodes);
 #ifdef DEBUG
-    printf("[%02x/%02d] %10s % 10d %p [%d] <- ",
+    printf("[%02x/%02d] %10s(%02d) % 10d %p [%d] <- ",
             (int)(((unsigned long)es >> 8) & 0xff),
             es->ip,
-            (code > 0 && code < 20) ? opcode_str[code] : "<ERROR>",
-            arg, es, es->sp);
-    if (es->sp > 0) {
-        print_box(es->stack[es->sp-1]);
+            (code >= 0 && code < 20) ? opcode_str[code] : "<ERROR>",
+            code,
+            arg, es, box_list_len(es->stack));
+    if (box_list_len(es->stack) > 0) {
+        print_box(box_list_get(es->stack, -1));
     } else {
         puts("");
     }
@@ -248,75 +303,76 @@ eval_next(struct box_eval * es) {
     es->ip++;
     switch (code) {
         case PUSHFREE:
-            if (!es->free) { ERROR("free = NULL"); }
-            es->stack[es->sp++] = es->free[arg];
+            box_list_push(es->stack, box_list_get(es->free, arg));
             break;
         case PUSHBOUND:
-            if (!es->bound) { ERROR("bound = NULL"); }
             assert(arg >= 0 && arg < es->code->nbound);
-            es->stack[es->sp++] = es->bound[arg];
+            box_list_push(es->stack, box_list_get(es->bound, arg));
             break;
         case PUSHCONST:
-            if (arg >= es->code->nconsts) {
-                ERROR("Invalid const");
-            }
-            es->stack[es->sp++] = es->code->consts[arg];
+            box_list_push(es->stack, box_list_get(es->code->consts, arg));
             break;
         case PUSHLOCAL:
-            assert(arg < es->nlocals);
-            es->stack[es->sp++] = es->locals[arg];
+            box_list_push(es->stack, box_list_get(es->locals, arg));
             break;
         case POPFREE:
-            assert(es->sp >= 1);
-            es->free[arg] = es->stack[--es->sp];
+            box_list_set(es->free, arg, box_list_pop(es->stack));
             break;
         case POPBOUND:
-            assert(es->sp >= 1);
-            es->bound[arg] = es->stack[--es->sp];
+            box_list_set(es->bound, arg, box_list_pop(es->stack));
             break;
         case POPLOCAL:
-             if (arg >= es->nlocals && arg < es->code->nlocals) {
-                 es->locals = realloc(es->locals, es->code->nlocals*sizeof(struct box_any *));
-                 assert(es->locals);
-                 es->nlocals = es->code->nlocals;
-             }
-             es->locals[arg] = es->stack[--es->sp];
+            if (box_list_len(es->locals) < es->code->nlocals) {
+#ifdef DEBUG
+                puts("expand local storage");
+#endif
+                // optimize
+                while (box_list_len(es->locals) < es->code->nlocals) {
+                    box_list_push(es->locals, 0);
+                }
+            }
+            box_list_set(es->locals, arg, box_list_pop(es->stack));
             break;
         case POP:
-            assert(es->sp > 0);
-            es->sp--;
+            (void)box_list_pop(es->stack);
             break;
         case CALL:
-            f = es->stack[--es->sp];
-            x = es->stack[--es->sp];
+            f = box_list_pop(es->stack);
+            x = box_list_pop(es->stack);
             return eval_app(es, f, x);
         case CLOSE:
-            f = es->stack[--es->sp];
-            es->sp -= ((struct box_fun*)f)->nfree;
-            x = mkclosure((struct box_fun*)f, &es->stack[es->sp]);
-            es->stack[es->sp++] = x;
+            f = box_list_pop(es->stack);
+            assert(f->type == FUN);
+            n = ((struct box_fun*)f)->nfree;
+            l = mklist(n);
+            for (int i = 0; i < n; i++) {
+                box_list_set(l, i, box_list_get(es->stack, i - n));
+            }
+            for (int i = 0; i < n; i++) {
+                // optimize
+                box_list_pop(es->stack);
+            }
+            x = mkclosure((struct box_fun*)f, l);
+            box_list_push(es->stack, x);
             break;
         case RETURN:
-            x = es->stack[--es->sp];
-            es->prev->stack[es->prev->sp++] = x;
+            x = box_list_pop(es->stack);
+            box_list_push(es->prev->stack, x);
             return es->prev;
         case END:
             return es->prev;
         case MKINT:
-            es->stack[es->sp++] = mkint(arg);
+            box_list_push(es->stack, mkint(arg));
             break;
         case PRINT:
-            x = es->stack[--es->sp];
+            x = box_list_pop(es->stack);
             print_box(x);
             break;
         case DUP:
-            assert(es->sp > 0);
-            x = es->stack[es->sp-1];
-            es->stack[es->sp++] = x;
+            box_list_push(es->stack, box_list_get(es->stack, -1));
             break;
         case CALL0:
-            assert(es->sp > 0);
-            g = (struct box_fun*)es->stack[--es->sp];
+            g = (struct box_fun*)box_list_pop(es->stack);
             assert(g->type == FUN);
             assert(g->nfree == 0);
             assert(g->nbound == 0);

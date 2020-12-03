@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include "../src/vm.h"
 
-struct box_any * add(struct box_any ** args) {
-    int i = (((struct box_int*)args[0])->val +
-             ((struct box_int*)args[1])->val);
+struct box_any * add(struct box_list * args) {
+    int i = (((struct box_int*)box_list_get(args, 0))->val +
+             ((struct box_int*)box_list_get(args, 1))->val);
     return mkint(i);
 }
 
@@ -23,14 +23,12 @@ int main() {
         { END, 0 }
     };
     struct box_fun * g = box_alloc(FUN);
-    g->consts = box_list_alloc(1);
-    g->consts[0] = cadd;
+    g->consts = mklist(1);
+    box_list_set(g->consts, 0, cadd);
     g->opcodes = &gopcodes[0];
-    g->stacksize = 1000;
     g->nlocals = 0;
     g->nfree = 0;
     g->nbound = 1;
-    g->nconsts = 1;
     g->nopcodes = sizeof(gopcodes) / sizeof(gopcodes[0]);
 
     // f = g(g(20))
@@ -41,14 +39,12 @@ int main() {
         { END, 0 }
     };
     struct box_fun * f = box_alloc(FUN);
-    f->consts = box_list_alloc(1);
-    f->consts[0] = (struct box_any*)g;
+    f->consts = mklist(1);
+    box_list_set(f->consts, 0, (struct box_any*)g);
     f->opcodes = &fopcodes[0];
-    f->stacksize = 1000;
     f->nlocals = 0;
     f->nfree = 0;
     f->nbound = 0;
-    f->nconsts = 1;
     f->nopcodes = sizeof(fopcodes) / sizeof(fopcodes[0]);
 
     struct box_eval * e0, * e = mkeval(0, f, 0, 0);
@@ -57,7 +53,7 @@ int main() {
     while ((e = eval_next(e))) {
     };
 
-    if (((struct box_int*)e0->stack[0])->val == 21) {
+    if (((struct box_int*)box_list_pop(e0->stack))->val == 21) {
         puts("OK");
     } else {
         puts("ERR");

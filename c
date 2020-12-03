@@ -13,7 +13,7 @@ cc () {
         -Wno-unused-parameter \
         -Wno-unused-function \
         -Wno-missing-field-initializers \
-        -g \
+        -g -rdynamic \
         $args
 }
 

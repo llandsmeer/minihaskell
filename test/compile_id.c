@@ -22,19 +22,18 @@ int main() {
         { CALL, 0 },
         { PUSHCONST, 0 },
         { CALL, 0 },
+        { DUP, 0},
         { PRINT, 0 },
         { END, 0 }
     };
     struct box_fun * fmain = box_alloc(FUN);
-    fmain->consts = box_list_alloc(1);
-    fmain->consts[0] = (struct box_any*)f;
+    fmain->consts = mklist(1);
+    box_list_set(fmain->consts, 0, (struct box_any*)f);
     fmain->opcodes = &fopcodes[0];
-    fmain->stacksize = 1000;
     fmain->nlocals = 0;
     fmain->nfree = 0;
     fmain->nbound = 0;
-    fmain->nconsts = 1;
-   fmain->nopcodes = sizeof(fopcodes) / sizeof(fopcodes[0]);
+    fmain->nopcodes = sizeof(fopcodes) / sizeof(fopcodes[0]);
 
     struct box_eval * e0, * e = mkeval(0, fmain, 0, 0);
     e0 = e;
@@ -42,7 +41,7 @@ int main() {
     while ((e = eval_next(e))) {
     };
 
-    if (((struct box_int*)e0->stack[0])->val == 42) {
+    if (((struct box_int*)box_list_pop(e0->stack))->val == 42) {
         puts("OK");
     } else {
         puts("ERR");

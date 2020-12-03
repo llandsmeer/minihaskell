@@ -98,13 +98,13 @@ void compile(struct box_fun * f, struct ast_node * n) {
             break;
         case LAM:
             g = mkfun(n);
-            APPEND(f->consts, f->nconsts, g);
+            box_list_push(f->consts, (struct box_any*)g);
             if (g->nfree > 0) {
                 for (int i = 0; i < g->nfree; i++) {
                     compile_load(f, g->free_names[i]);
                 }
             }
-            addop(f, PUSHCONST, f->nconsts-1);
+            addop(f, PUSHCONST, box_list_len(f->consts)-1);
             if (g->nfree > 0) {
                 addop(f, CLOSE, NOARG);
             }
@@ -118,8 +118,8 @@ void compile(struct box_fun * f, struct ast_node * n) {
             compile_load(f, n->x.atomload.name);
             break;
         case ATOMINT:
-            APPEND(f->consts, f->nconsts, mkint(atoi(n->x.atomint.value)));
-            addop(f, PUSHCONST, f->nconsts-1);
+            box_list_push(f->consts, mkint(atoi(n->x.atomint.value)));
+            addop(f, PUSHCONST, box_list_len(f->consts)-1);
             break;
         case NAMELIST:
             ERROR("NAMELIST SHOULD NOT BE IN FINAL AST");
@@ -129,15 +129,12 @@ void compile(struct box_fun * f, struct ast_node * n) {
 
 struct box_fun * mkfun(struct ast_node * f) {
     struct box_fun * box = box_alloc(FUN);
-    box->consts = 0;
+    box->consts = mklist(0);
     box->opcodes = 0;
-    box->stacksize = 0;
     box->local_names = 0;
     box->nlocals = 0;
     box->nopcodes = 0;
-    box->nconsts = 0;
     box->nfree = 0;
-    box->stacksize = 1024;
     box->free_names = 0;
 
     if (!f) {

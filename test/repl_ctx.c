@@ -14,9 +14,8 @@ struct box_any * eval(struct box_eval * ctx, struct ast_node * n) {
     }
     struct box_eval * e = ctx;
     while ((e = eval_next(e)));
-    assert(ctx->sp <= 1);
-    if (ctx->sp == 1) {
-        struct box_any * result = ctx->stack[--ctx->sp];
+    if (box_list_len(ctx->stack) == 1) {
+        struct box_any * result = box_list_pop(ctx->stack);
         return result;
     }
     return 0;

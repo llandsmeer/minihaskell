@@ -14,13 +14,11 @@ int main() {
         { END, 0 }
     };
     struct box_fun * fmain = box_alloc(FUN);
-    fmain->consts = box_list_alloc(1);
+    fmain->consts = mklist(1);
     fmain->opcodes = &fopcodes[0];
-    fmain->stacksize = 1000;
     fmain->nlocals = 0;
     fmain->nfree = 0;
     fmain->nbound = 0;
-    fmain->nconsts = 1;
     fmain->nopcodes = sizeof(fopcodes) / sizeof(fopcodes[0]);
 
     //struct ctx head = { 0 };
@@ -33,12 +31,12 @@ int main() {
         puts("");
         if (last->type != STMTASSIGN) {
             struct box_fun * g = mkfun(mklam(mknamelist(), last));
-            fmain->consts[0] = (struct box_any*)g;
+            box_list_set(fmain->consts, 0, (struct box_any*)g);
             struct box_eval * e = mkeval(0, fmain, 0, 0);
             while ((e = eval_next(e))) {};
         } else {
             struct box_fun * g = mkfun(mklam(mknamelist(), last->x.stmtassign.expr));
-            fmain->consts[0] = (struct box_any*)g;
+            box_list_set(fmain->consts, 0, (struct box_any*)g);
             struct box_eval * e = mkeval(0, fmain, 0, 0);
             while ((e = eval_next(e))) {};
         }
